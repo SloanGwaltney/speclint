@@ -1,0 +1,29 @@
+app.go:3: @scenario names scenarios by ID only, like @scenario [#some-id] [#other-id]
+app.go:4: @scenario names [#nope] twice
+app.go:4: @scenario [#nope]: no feature file has a scenario with @id:nope
+app.go:4: @scenario [#sms-reminder]: scenario is withdrawn; remove it from this line
+app.go:5: @scenario is already on line 4 of this comment; name every scenario on that one line
+app.go:6: @given [features/call-reminders.feature] I had a call scheduled for 3 PM: no such step in features/call-reminders.feature
+app.go:7: @then [features/call-reminders.feature] I cancelled the call: the spec's step takes @and or @given
+app.go:8: @then [features/call-reminders.feature] I receive an SMS reminder: step is only used by withdrawn scenarios; remove this annotation
+app.go:9: @then [features/call-reminders.feature#sms-reminder]: scenario is withdrawn; remove this annotation
+docs/adr/0001-bad-refs.md:3: Related mixes universal with feature references; use one or the other
+docs/adr/0001-bad-refs.md:6: [features/call-reminders.feature#cancelled-no-reminder]: title "Wrong title" doesn't match the spec's "No reminder for a cancelled call"
+docs/adr/0001-bad-refs.md:7: [features/call-reminders.feature#sms-reminder]: scenario is withdrawn; don't list it in Related
+docs/adr/0001-bad-refs.md:8: [features/call-reminders.feature#nope]: features/call-reminders.feature has no scenario with @id:nope
+docs/adr/0001-bad-refs.md:9: [features/call-reminders.feature]: title "Wrong feature title" doesn't match the Feature title "Call reminders"
+docs/adr/0001-bad-refs.md:10: [docs/adr/0009-missing.md] doesn't exist
+docs/adr/0001-bad-refs.md:11: [README.md]: Related entries link to features/ or docs/adr/
+docs/adr/0001-bad-refs.md:12: Related entry should be "- universal" or "- [<path>] <title>"
+docs/adr/0002-no-related.md:1: ADR has no ## Related section
+docs/adr/0003-empty-related.md:3: Related lists no features and isn't universal
+features/call-reminders.feature:1: @status:implemented goes on a Scenario, not on Feature
+features/call-reminders.feature:7: step "And I cancelled the call" of implemented scenario cancelled-no-reminder has no @and or @given [features/call-reminders.feature] annotation in tests
+features/call-reminders.feature:8: step "Then I do not receive a reminder" of implemented scenario cancelled-no-reminder has no @then [features/call-reminders.feature] annotation in tests
+features/call-reminders.feature:11: scenario "Missing an ID" has no @id: tag
+features/call-reminders.feature:14: scenario "Missing a status" has no @status: tag
+features/call-reminders.feature:17: scenario "Bad status and ID" has unknown status "done"
+features/call-reminders.feature:17: scenario ID "Bad_ID" isn't kebab-case (lowercase letters, digits, hyphens)
+features/call-reminders.feature:20: scenario ID "no-status" is already used on line 14
+features/other.feature:4: scenario ID "sms-reminder" is already used in features/call-reminders.feature:23; IDs are unique across feature files
+queries.sql:2: @then [features/call-reminders.feature] I receive a reminder soon: no such step in features/call-reminders.feature

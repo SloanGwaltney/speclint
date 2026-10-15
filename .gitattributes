@@ -1,0 +1,6 @@
+# Every text file is checked out with LF, whatever core.autocrlf says. gofmt rejects CRLF, and Git
+# for Windows sets core.autocrlf=true by default. Binary files are detected and left alone.
+* text=auto eol=lf
+
+# Shell scripts must keep LF endings; Git Bash fails on CRLF (e.g. .claude/hooks/check-stop.sh).
+*.sh text eol=lf

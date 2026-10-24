@@ -41,8 +41,8 @@ type fileConfig struct {
 	// FeaturesDir and ADRDir replace the defaults, "features" and "docs/adr".
 	FeaturesDir string `json:"featuresDir"`
 	ADRDir      string `json:"adrDir"`
-	// Languages maps file extensions to a comment style: "c", "hash", "dash", or "c-hash". It adds
-	// to the defaults, or overrides one. A style of "" stops an extension being read.
+	// Languages maps file extensions to a comment style: "c", "hash", "dash", "c-hash", or "html".
+	// It adds to the defaults, or overrides one. A style of "" stops an extension being read.
 	Languages map[string]string `json:"languages"`
 	// SkipDirs adds directories that are never read. A name matches a directory with that name
 	// anywhere; a path with a slash matches that repo-relative path only.
@@ -94,6 +94,13 @@ var styles = map[string]commentStyle{
 		line:    regexp.MustCompile(`^\s*(//|/\*|\*|#)`),
 		closers: []string{"*/"},
 	},
+	// <!-- --> comments, and Thymeleaf's <!--/* */--> comments, which are removed when the template
+	// renders.
+	"html": {
+		prefix:  regexp.MustCompile(`^\s*<!--(/\*)?\s*$`),
+		line:    regexp.MustCompile(`^\s*<!--`),
+		closers: []string{"*/-->", "-->"},
+	},
 }
 
 // defaultLanguages maps the extensions read by default to their comment style.
@@ -110,6 +117,8 @@ var defaultLanguages = map[string]string{
 	".sql": "dash", ".lua": "dash", ".hs": "dash", ".elm": "dash",
 	// both
 	".php": "c-hash",
+	// <!-- --> comments
+	".html": "html", ".htm": "html",
 }
 
 // defaultSkipDirs are never read: dependencies, build output, and test fixtures (which may
@@ -204,7 +213,7 @@ func (c *Config) apply(src []byte) error {
 		}
 		style, ok := styles[name]
 		if !ok {
-			return fmt.Errorf("languages: %s has unknown comment style %q; use c, hash, dash, or c-hash", ext, name)
+			return fmt.Errorf("languages: %s has unknown comment style %q; use c, hash, dash, c-hash, or html", ext, name)
 		}
 		c.languages[ext] = style
 	}

@@ -122,6 +122,37 @@ func TestParseAnnotationsWithHashComments(t *testing.T) {
 	}
 }
 
+func TestParseAnnotationsWithHTMLComments(t *testing.T) {
+	src := strings.Join([]string{
+		"<!--/* @scenario [#a] [#b] */-->",
+		"<!-- @scenario [#c] -->",
+		"<section>",
+		"  <!--/* @then [features/a.feature] thymeleaf comment */-->",
+		"  <!-- @then [features/a.feature] html comment -->",
+		"  <p>x</p> <!-- @then [features/a.feature] trailing comment -->",
+		`  <p title="<!-- @then [features/a.feature] in an attribute -->">y</p>`,
+		"  <!--",
+		"    @then [features/a.feature] inside a comment block",
+		"  -->",
+		"</section>",
+		"// @then [features/a.feature] not an html comment",
+	}, "\n")
+
+	annotations, problems := parse("templates/board.html", src, false)
+	var got []string
+	for _, a := range annotations {
+		got = append(got, a.Keyword+":"+a.ID+a.Text)
+	}
+	want := []string{"scenario:a", "scenario:b", "scenario:c", "then:thymeleaf comment", "then:html comment"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// Lines 1 and 2 are one comment block, so the second @scenario line is reported.
+	if len(problems) != 1 || problems[0].Line != 2 {
+		t.Errorf("problems: got %v, want one on line 2", problems)
+	}
+}
+
 // And and But continue the kind of the step before them, so they take either keyword.
 func TestStepKindContinuesTheStepBefore(t *testing.T) {
 	f, problems := parseFeature("features/x.feature", `Feature: X

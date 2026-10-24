@@ -168,6 +168,7 @@ after code isn't read. Use the language's comment:
 | Python, Ruby, Elixir, shell, PowerShell, R, Julia            | `#`                       |
 | SQL, Lua, Haskell, Elm                                       | `--`                      |
 | PHP                                                          | `//`, `/* */`, or `#`     |
+| HTML, including Thymeleaf templates                          | `<!-- -->` or `<!--/* */-->` |
 
 If the project uses a language that isn't read by default, add its extension under `languages` in
 `.speclint.json` (see the speclint README).

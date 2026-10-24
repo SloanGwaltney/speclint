@@ -12,8 +12,8 @@ correct.
   specs are tagged and how code and tests link to them. It's versioned with the tools, so the
   rules and the checker always agree.
 
-Go 1.22 or later, standard library only. It reads annotations in any language with `//`, `#`, or
-`--` comments.
+Go 1.22 or later, standard library only. It reads annotations in any language with `//`, `#`, `--`,
+or `<!-- -->` comments.
 
 ## Why
 
@@ -215,7 +215,7 @@ Everything has a default, so most projects need no configuration. To change some
 |---|---|---|
 | `featuresDir` | `features` | Where the `.feature` files are. |
 | `adrDir` | `docs/adr` | Where the ADRs are. |
-| `languages` | Most languages: see `defaultLanguages` in `internal/speclint/config.go` | Adds file extensions to read, each with its comment style: `c` (`//`, `/* */`, JSX `{/* */}`), `hash` (`#`), `dash` (`--`), or `c-hash` (both `//` and `#`). `""` stops an extension being read. |
+| `languages` | Most languages: see `defaultLanguages` in `internal/speclint/config.go` | Adds file extensions to read, each with its comment style: `c` (`//`, `/* */`, JSX `{/* */}`), `hash` (`#`), `dash` (`--`), `c-hash` (both `//` and `#`), or `html` (`<!-- -->`, and Thymeleaf's `<!--/* */-->`). `""` stops an extension being read. |
 | `skipDirs` | Dot-directories, `node_modules`, `vendor`, `dist`, `build`, `out`, `target`, `bin`, `obj`, `coverage`, `testdata`, `venv`, `__pycache__` | Adds directories never read. A name matches anywhere; a path with a slash matches only that path. Add generated code here. |
 | `testPatterns` | The usual conventions: `*_test.go`, `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.py`, `*_spec.rb`, `*Test.*`, `*Tests.*`, and `__tests__/`, `test/`, `tests/`, `spec/` directories | Adds regular expressions, matched against repo-relative paths, for other test files. |
 | `layers` | SQL files, then each top-level directory | Replaces the layers spectrace groups links by. List them bottom of the stack first; the first match wins. Files no layer matches are grouped by top-level directory. |

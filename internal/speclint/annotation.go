@@ -6,19 +6,18 @@ import (
 	"strings"
 )
 
-// Annotation is one spec link in code or tests: one scenario named on a @scenario line, e.g.
-// "@scenario [#some-id] [#other-id]", or a step annotation, e.g.
-// "@then [features/x.feature#some-id] I receive a reminder".
+// Annotation is one intent named on an @intent line in code or tests, e.g. the first of
+// "@intent [#some-id] [#other-id]".
 type Annotation struct {
-	Keyword string // lowercase: scenario, given, when, then, and, but
-	// Feature is the bracketed path on a step annotation. A @scenario annotation names no path, so
-	// its Feature is the file whose scenario has the ID, filled in once the features are loaded.
+	ID   string // the intent ID after '#'
+	File string // repo-relative path of the source file
+	Line int
+	Test bool // true when the source file is a test
+	// Count is how many intents the @intent line names, this one included.
+	Count int
+	// Feature is the intent file that has the ID, filled in once the intent files are loaded, or
+	// "" if none has it.
 	Feature string
-	ID      string // the scenario ID after '#', or "" if there isn't one
-	Text    string // the step text; empty for @scenario
-	File    string // repo-relative path of the source file
-	Line    int
-	Test    bool // true when the source file is a test
 	// Layer names where the source file sits in the app, e.g. "storage" (see layerOf in
 	// config.go). layerRank orders layers from the bottom of the stack up.
 	Layer     string
@@ -33,81 +32,75 @@ func (a Annotation) Where() string {
 	return a.Layer
 }
 
-// keywordPattern finds an annotation's keyword. What follows it is read by scenarioRefs or
-// stepPattern.
-var keywordPattern = regexp.MustCompile(`@(scenario|given|when|then|and|but)\b`)
+// keywordPattern finds an annotation's keyword. Step keywords and @scenario are speclint v1
+// annotations, found so they can be reported.
+var keywordPattern = regexp.MustCompile(`@(intent|scenario|given|when|then|and|but)\b`)
 
-// The path and ID are matched loosely so that malformed references get reported rather than
-// silently skipped.
-var stepPattern = regexp.MustCompile(`^\s+\[([^\]#]*?)(?:#([^\]]*))?\](.*)`)
+// intentRef is one "[#id]" on an @intent line.
+var intentRef = regexp.MustCompile(`^\[#([^\]\s]*)\]`)
 
-// scenarioRef is one "[#id]" on a @scenario line.
-var scenarioRef = regexp.MustCompile(`^\[#([^\]\s]*)\]`)
-
-// parseAnnotations finds the spec annotations in a source file. An annotation must be the only
+// parseAnnotations finds the @intent annotations in a source file. An annotation must be the only
 // thing in its comment, on a line of its own, so a string that happens to look like one is
-// ignored. It reports a @scenario line that isn't a list of [#id] references, and a second
-// @scenario line in the same comment block, since one line names every scenario of the code
-// under it. style says how the file's language writes comments.
+// ignored. It reports an @intent line that isn't a list of [#id] references, a second @intent line
+// in the same comment block, since one line names every intent of the code under it, and
+// annotations left over from speclint v1. style says how the file's language writes comments.
 func parseAnnotations(file, src string, style commentStyle, test bool) ([]Annotation, []Problem) {
 	var out []Annotation
 	var problems []Problem
 	report := func(line int, msg string) {
 		problems = append(problems, Problem{File: file, Line: line, Msg: msg})
 	}
-	scenarioLine := 0 // the @scenario line in the current comment block, or 0
+	intentLine := 0 // the @intent line in the current comment block, or 0
 	for i, raw := range strings.Split(src, "\n") {
 		line := i + 1
 		if !style.line.MatchString(raw) {
-			scenarioLine = 0
+			intentLine = 0
 		}
 		loc := keywordPattern.FindStringSubmatchIndex(raw)
 		if loc == nil || !style.prefix.MatchString(raw[:loc[0]]) {
 			continue
 		}
 		keyword := raw[loc[2]:loc[3]]
-		rest := raw[loc[1]:]
-
-		if keyword == "scenario" {
-			// Prose that wraps onto a line starting with "@scenario" isn't an annotation.
-			if !strings.HasPrefix(strings.TrimSpace(rest), "[") {
-				continue
-			}
-			ids, ok := scenarioRefs(closeComment(rest, style))
-			if !ok {
-				report(line, "@scenario names scenarios by ID only, like @scenario [#some-id] [#other-id]")
-				continue
-			}
-			if scenarioLine != 0 {
-				report(line, fmt.Sprintf("@scenario is already on line %d of this comment; name every scenario on that one line", scenarioLine))
-			} else {
-				scenarioLine = line
-			}
-			seen := map[string]bool{}
-			for _, id := range ids {
-				if seen[id] {
-					report(line, "@scenario names [#"+id+"] twice")
-					continue
-				}
-				seen[id] = true
-				out = append(out, Annotation{Keyword: keyword, ID: id, File: file, Line: line, Test: test})
-			}
+		rest := closeComment(raw[loc[1]:], style)
+		// Prose that wraps onto a line starting with "@intent" or "@then" isn't an annotation.
+		if !strings.HasPrefix(rest, "[") {
 			continue
 		}
 
-		m := stepPattern.FindStringSubmatch(rest)
-		if m == nil {
+		switch keyword {
+		case "intent":
+		case "scenario":
+			report(line, "@scenario is speclint v1; link intents with @intent [#id]")
+			continue
+		default:
+			report(line, fmt.Sprintf("@%s is a speclint v1 step annotation; v2 links intents, not steps, so remove it", keyword))
 			continue
 		}
-		out = append(out, Annotation{
-			Keyword: keyword,
-			Feature: strings.TrimSpace(m[1]),
-			ID:      strings.TrimSpace(m[2]),
-			Text:    closeComment(m[3], style),
-			File:    file,
-			Line:    line,
-			Test:    test,
-		})
+
+		ids, ok := intentRefs(rest)
+		if !ok {
+			report(line, "@intent names intents by ID only, like @intent [#some-id] [#other-id]")
+			continue
+		}
+		if intentLine != 0 {
+			report(line, fmt.Sprintf("@intent is already on line %d of this comment; name every intent on that one line", intentLine))
+		} else {
+			intentLine = line
+		}
+		seen := map[string]bool{}
+		var named []Annotation
+		for _, id := range ids {
+			if seen[id] {
+				report(line, "@intent names [#"+id+"] twice")
+				continue
+			}
+			seen[id] = true
+			named = append(named, Annotation{ID: id, File: file, Line: line, Test: test})
+		}
+		for i := range named {
+			named[i].Count = len(named)
+		}
+		out = append(out, named...)
 	}
 	return out, problems
 }
@@ -123,12 +116,12 @@ func closeComment(s string, style commentStyle) string {
 	return s
 }
 
-// scenarioRefs reads the IDs from what follows @scenario: one or more [#id], separated by spaces,
-// and nothing else.
-func scenarioRefs(s string) ([]string, bool) {
+// intentRefs reads the IDs from what follows @intent: one or more [#id], separated by spaces, and
+// nothing else.
+func intentRefs(s string) ([]string, bool) {
 	var ids []string
 	for s = strings.TrimSpace(s); s != ""; s = strings.TrimSpace(s) {
-		m := scenarioRef.FindStringSubmatch(s)
+		m := intentRef.FindStringSubmatch(s)
 		if m == nil {
 			return nil, false
 		}

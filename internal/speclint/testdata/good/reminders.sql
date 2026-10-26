@@ -1,3 +1,3 @@
--- name: ListReminders :many
--- @then [features/call-reminders.feature#default-lead-time] I receive a reminder
+-- name: ListDueReminders :many
+-- @intent [#default-lead-time]
 SELECT * FROM reminders;

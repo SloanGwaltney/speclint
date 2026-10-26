@@ -1,10 +1,11 @@
 package main
 
-// @scenario [features/call-reminders.feature#cancelled-no-reminder] No reminder for a cancelled call
-// @scenario [#nope] [#sms-reminder] [#nope]
+// @intent [features/call-reminders.md#cancelled-no-reminder] Title
+// @intent [#nope] [#sms-reminder] [#nope]
+// @intent [#cancelled-no-reminder]
 // @scenario [#cancelled-no-reminder]
-// @given [features/call-reminders.feature] I had a call scheduled for 3 PM
-// @then [features/call-reminders.feature] I cancelled the call
-// @then [features/call-reminders.feature] I receive an SMS reminder
-// @then [features/call-reminders.feature#sms-reminder] I receive an SMS reminder
+// @then [features/call-reminders.feature] I receive a reminder
 func app() {}
+
+// @intent [#cancelled-no-reminder] [#too-wordy] [#no-statement]
+func other() {}

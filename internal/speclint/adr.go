@@ -9,8 +9,9 @@ import (
 
 var relatedEntryPattern = regexp.MustCompile(`^-\s+\[([^\]#]+)(?:#([^\]]*))?\]\s*(.*)$`)
 
-// checkADRs validates the Related section of each docs/adr/*.md, which links decisions to specs
-// in the same [features/x.feature#<id>] form as code annotations.
+// checkADRs validates the Related section of each docs/adr/*.md, which links decisions to intents
+// as [features/x.md#<id>], or to a whole intent file as [features/x.md]. The text after the link
+// is a label for people and isn't checked.
 func (l *linter) checkADRs(root string) error {
 	paths, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(l.cfg.ADRDir), "*.md"))
 	if err != nil {
@@ -59,15 +60,15 @@ func (l *linter) checkADR(root, file, src string) {
 		}
 		m := relatedEntryPattern.FindStringSubmatch(text)
 		if m == nil {
-			l.report(file, line, "Related entry should be \"- universal\" or \"- [<path>] <title>\"")
+			l.report(file, line, "Related entry should be \"- universal\" or \"- [<path>] <label>\"")
 			continue
 		}
-		target, id, title := m[1], m[2], strings.TrimSpace(m[3])
+		target, id := m[1], m[2]
 
 		switch {
 		case strings.HasPrefix(target, l.cfg.FeaturesDir+"/"):
 			featureRefs++
-			l.checkADRFeatureRef(file, line, target, id, title)
+			l.checkADRFeatureRef(file, line, target, id)
 		case strings.HasPrefix(target, l.cfg.ADRDir+"/"):
 			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(target))); err != nil {
 				l.report(file, line, "[%s] doesn't exist", target)
@@ -81,35 +82,30 @@ func (l *linter) checkADR(root, file, src string) {
 	case !sawRelated:
 		l.report(file, 1, "ADR has no ## Related section")
 	case universal == 0 && featureRefs == 0:
-		l.report(file, relatedLine, "Related lists no features and isn't universal")
+		l.report(file, relatedLine, "Related lists no intents and isn't universal")
 	case universal > 0 && featureRefs > 0:
-		l.report(file, relatedLine, "Related mixes universal with feature references; use one or the other")
+		l.report(file, relatedLine, "Related mixes universal with intent references; use one or the other")
 	}
 }
 
-func (l *linter) checkADRFeatureRef(file string, line int, target, id, title string) {
+func (l *linter) checkADRFeatureRef(file string, line int, target, id string) {
 	ref := target
 	if id != "" {
 		ref += "#" + id
 	}
-	f, ok := l.features[target]
+	f, ok := l.files[target]
 	if !ok {
 		l.report(file, line, "[%s]: %s doesn't exist", ref, target)
 		return
 	}
 	if id == "" {
-		if title != f.Title {
-			l.report(file, line, "[%s]: title %q doesn't match the Feature title %q", ref, title, f.Title)
-		}
 		return
 	}
-	s := f.scenario(id)
+	in := f.intent(id)
 	switch {
-	case s == nil:
-		l.report(file, line, "[%s]: %s has no scenario with @id:%s", ref, target, id)
-	case s.Status == StatusWithdrawn:
-		l.report(file, line, "[%s]: scenario is withdrawn; don't list it in Related", ref)
-	case title != s.Title:
-		l.report(file, line, "[%s]: title %q doesn't match the spec's %q", ref, title, s.Title)
+	case in == nil:
+		l.report(file, line, "[%s]: %s has no intent with @id:%s", ref, target, id)
+	case in.Status == StatusWithdrawn:
+		l.report(file, line, "[%s]: intent is withdrawn; don't list it in Related", ref)
 	}
 }

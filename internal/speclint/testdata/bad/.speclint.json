@@ -1,0 +1,3 @@
+{
+  "limits": { "intentsPerFile": 3, "intentsPerEntryPoint": 2, "statementWords": 10 }
+}

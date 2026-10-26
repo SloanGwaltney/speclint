@@ -2,12 +2,12 @@
 
 ## Related
 
-- [features/call-reminders.feature#default-lead-time] Reminder fires at the default lead time
-- [features/call-reminders.feature] Call reminders
+- [features/call-reminders.md#default-lead-time] Reminder at the lead time
+- [features/call-reminders.md] Call reminders
 - [docs/adr/0002-use-wails.md] Use Wails
 
 ## Notes
 
 ```markdown
-- [features/nope.feature#ignored] Examples in code fences are ignored
+- [features/nope.md#ignored] Examples in code fences are ignored
 ```

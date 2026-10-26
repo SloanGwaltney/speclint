@@ -89,7 +89,7 @@ type commentStyle struct {
 	// prefix matches what may precede an annotation on its line: indentation, then the comment
 	// opener.
 	prefix *regexp.Regexp
-	// line matches a line that is only a comment, so comment lines between two @scenario lines
+	// line matches a line that is only a comment, so comment lines between two @intent lines
 	// keep them in the same comment block.
 	line *regexp.Regexp
 	// closers are block comment endings trimmed from an annotation that closes on its own line.

@@ -1,6 +1,6 @@
 // Package speclint checks that code, tests, and ADRs link correctly to the intents in
 // features/*.md, and that intents stay small and high-level, as described in
-// docs/spec-annotations.md. A project adjusts what it reads with an optional .speclint.json (see
+// docs/intents.md. A project adjusts what it reads with an optional .speclint.json (see
 // config.go).
 package speclint
 

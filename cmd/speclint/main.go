@@ -6,7 +6,7 @@
 //
 // It prints one "file:line: problem" per finding and exits 1 if there are any errors. Limits that
 // are exceeded print as "file:line: warning: ..." and don't change the exit status unless
-// strictLimits is set in .speclint.json. See docs/spec-annotations.md for the rules it enforces.
+// strictLimits is set in .speclint.json. See docs/intents.md for the rules it enforces.
 package main
 
 import (

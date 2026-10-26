@@ -1,6 +1,7 @@
-// Package speclint checks that code, tests, and ADRs link correctly to the specs in
-// features/*.feature, as described in docs/spec-annotations.md. A project adjusts what it reads
-// with an optional .speclint.json (see config.go).
+// Package speclint checks that code, tests, and ADRs link correctly to the intents in
+// features/*.md, and that intents stay small and high-level, as described in
+// docs/spec-annotations.md. A project adjusts what it reads with an optional .speclint.json (see
+// config.go).
 package speclint
 
 import (
@@ -13,14 +14,19 @@ import (
 	"strings"
 )
 
-// Problem is one lint finding, reported as "file:line: msg".
+// Problem is one lint finding, reported as "file:line: msg", or "file:line: warning: msg" for a
+// warning.
 type Problem struct {
-	File string
-	Line int
-	Msg  string
+	File    string
+	Line    int
+	Msg     string
+	Warning bool // a limit was exceeded and strictLimits is off; doesn't fail the run
 }
 
 func (p Problem) String() string {
+	if p.Warning {
+		return fmt.Sprintf("%s:%d: warning: %s", p.File, p.Line, p.Msg)
+	}
 	return fmt.Sprintf("%s:%d: %s", p.File, p.Line, p.Msg)
 }
 
@@ -30,7 +36,7 @@ func Lint(root string) ([]Problem, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := l.loadFeatures(root); err != nil {
+	if err := l.loadIntents(root); err != nil {
 		return nil, err
 	}
 	if err := l.loadAnnotations(root); err != nil {
@@ -39,7 +45,9 @@ func Lint(root string) ([]Problem, error) {
 	for _, a := range l.annotations {
 		l.checkAnnotation(a)
 	}
+	l.checkReplaces()
 	l.checkCoverage()
+	l.checkLimits()
 	if err := l.checkADRs(root); err != nil {
 		return nil, err
 	}
@@ -60,25 +68,49 @@ func newLinter(root string) (*linter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &linter{cfg: cfg, features: map[string]*Feature{}}, nil
+	return &linter{cfg: cfg, files: map[string]*IntentFile{}}, nil
 }
 
 type linter struct {
-	cfg      *Config
-	features map[string]*Feature // keyed by repo-relative path
-	// scenarioFeature maps each scenario ID to the feature file that has it. IDs are unique across
-	// every feature file, so a @scenario annotation needs only the ID.
-	scenarioFeature map[string]string
-	annotations     []Annotation
-	problems        []Problem
+	cfg   *Config
+	files map[string]*IntentFile // keyed by repo-relative path
+	// intentFile maps each intent ID to the file that has it. IDs are unique across every intent
+	// file, so an @intent annotation needs only the ID.
+	intentFile  map[string]string
+	annotations []Annotation
+	problems    []Problem
 }
 
 func (l *linter) report(file string, line int, format string, args ...any) {
 	l.problems = append(l.problems, Problem{File: file, Line: line, Msg: fmt.Sprintf(format, args...)})
 }
 
-func (l *linter) loadFeatures(root string) error {
-	paths, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(l.cfg.FeaturesDir), "*.feature"))
+// overLimit reports a limit that was exceeded: a warning, or an error with strictLimits.
+func (l *linter) overLimit(file string, line int, format string, args ...any) {
+	l.problems = append(l.problems, Problem{File: file, Line: line, Msg: fmt.Sprintf(format, args...), Warning: !l.cfg.StrictLimits})
+}
+
+// lookup returns the intent with an ID, from any intent file, or nil.
+func (l *linter) lookup(id string) *Intent {
+	if f, ok := l.intentFile[id]; ok {
+		return l.files[f].intent(id)
+	}
+	return nil
+}
+
+func (l *linter) loadIntents(root string) error {
+	dir := filepath.Join(root, filepath.FromSlash(l.cfg.FeaturesDir))
+
+	// speclint v1 read Gherkin .feature files. Say so rather than silently ignoring them.
+	old, err := filepath.Glob(filepath.Join(dir, "*.feature"))
+	if err != nil {
+		return err
+	}
+	for _, p := range old {
+		l.report(l.cfg.FeaturesDir+"/"+filepath.Base(p), 1, "speclint v2 reads intents from %s/*.md, not .feature files; convert this file (see \"Moving from v1\" in the speclint README)", l.cfg.FeaturesDir)
+	}
+
+	paths, err := filepath.Glob(filepath.Join(dir, "*.md"))
 	if err != nil {
 		return err
 	}
@@ -88,32 +120,32 @@ func (l *linter) loadFeatures(root string) error {
 			return err
 		}
 		rel := l.cfg.FeaturesDir + "/" + filepath.Base(p)
-		f, problems := parseFeature(rel, string(src))
-		l.features[rel] = f
+		f, problems := parseIntentFile(rel, string(src))
+		l.files[rel] = f
 		l.problems = append(l.problems, problems...)
 	}
 
 	// Glob returns paths sorted, so the first file to use an ID keeps it and later ones are
 	// reported.
-	l.scenarioFeature = map[string]string{}
+	l.intentFile = map[string]string{}
 	for _, p := range paths {
 		rel := l.cfg.FeaturesDir + "/" + filepath.Base(p)
-		for _, s := range l.features[rel].Scenarios {
-			if s.ID == "" {
+		for _, in := range l.files[rel].Intents {
+			if in.ID == "" {
 				continue
 			}
-			if first, dup := l.scenarioFeature[s.ID]; dup {
-				l.report(rel, s.Line, "scenario ID %q is already used in %s:%d; IDs are unique across feature files", s.ID, first, l.features[first].scenario(s.ID).Line)
+			if first, dup := l.intentFile[in.ID]; dup {
+				l.report(rel, in.Line, "intent ID %q is already used in %s:%d; IDs are unique across intent files", in.ID, first, l.files[first].intent(in.ID).Line)
 				continue
 			}
-			l.scenarioFeature[s.ID] = rel
+			l.intentFile[in.ID] = rel
 		}
 	}
 	return nil
 }
 
-// loadAnnotations reads the annotations in every source file. It needs the features loaded first,
-// to find the feature file of each scenario a @scenario annotation names.
+// loadAnnotations reads the annotations in every source file. It needs the intents loaded first,
+// to find the file of each intent an annotation names.
 func (l *linter) loadAnnotations(root string) error {
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -142,167 +174,121 @@ func (l *linter) loadAnnotations(root string) error {
 		layer, rank := l.cfg.layerOf(rel)
 		for i := range annotations {
 			annotations[i].Layer, annotations[i].layerRank = layer, rank
+			annotations[i].Feature = l.intentFile[annotations[i].ID]
 		}
 		l.annotations = append(l.annotations, annotations...)
 		l.problems = append(l.problems, problems...)
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	for i, a := range l.annotations {
-		if a.Keyword == "scenario" {
-			l.annotations[i].Feature = l.scenarioFeature[a.ID]
-		}
-	}
-	return nil
+	return err
 }
 
-// checkAnnotation reports an annotation that doesn't resolve to a live scenario or step in the
-// spec it names.
+// checkAnnotation reports an annotation that doesn't name a live intent.
 func (l *linter) checkAnnotation(a Annotation) {
-	if a.Keyword == "scenario" {
-		switch {
-		case a.Feature == "":
-			l.report(a.File, a.Line, "@scenario [#%s]: no feature file has a scenario with @id:%s", a.ID, a.ID)
-		case l.features[a.Feature].scenario(a.ID).Status == StatusWithdrawn:
-			l.report(a.File, a.Line, "@scenario [#%s]: scenario is withdrawn; remove it from this line", a.ID)
-		}
-		return
-	}
-
-	ref := a.Feature
-	if a.ID != "" {
-		ref += "#" + a.ID
-	}
-
-	if !strings.HasPrefix(a.Feature, l.cfg.FeaturesDir+"/") || !strings.HasSuffix(a.Feature, ".feature") || strings.Contains(a.Feature, `\`) {
-		l.report(a.File, a.Line, "@%s [%s]: the path must be repo-relative with forward slashes, like [%s/x.feature]", a.Keyword, ref, l.cfg.FeaturesDir)
-		return
-	}
-	f, ok := l.features[a.Feature]
-	if !ok {
-		l.report(a.File, a.Line, "@%s [%s]: %s doesn't exist", a.Keyword, ref, a.Feature)
-		return
-	}
-
-	var scoped *Scenario
-	if a.ID != "" {
-		if scoped = f.scenario(a.ID); scoped == nil {
-			l.report(a.File, a.Line, "@%s [%s]: %s has no scenario with @id:%s", a.Keyword, ref, a.Feature, a.ID)
-			return
-		}
-		if scoped.Status == StatusWithdrawn {
-			l.report(a.File, a.Line, "@%s [%s]: scenario is withdrawn; remove this annotation", a.Keyword, ref)
-			return
-		}
-	}
-
-	candidates := f.Scenarios
-	if scoped != nil {
-		candidates = []*Scenario{scoped}
-	}
-	var live, withdrawn bool
-	var otherKeyword string
-	for _, s := range candidates {
-		for _, st := range s.Steps {
-			if st.Text != a.Text {
-				continue
-			}
-			if !st.Accepts(a.Keyword) {
-				otherKeyword = "@" + strings.ToLower(st.Keyword)
-				if st.Kind != strings.ToLower(st.Keyword) {
-					otherKeyword += " or @" + st.Kind
-				}
-				continue
-			}
-			if s.Status == StatusWithdrawn {
-				withdrawn = true
-			} else {
-				live = true
-			}
-		}
-	}
-	where := a.Feature
-	if scoped != nil {
-		where = "scenario " + scoped.ID
-	}
+	in := l.lookup(a.ID)
 	switch {
-	case live:
-	case withdrawn:
-		l.report(a.File, a.Line, "@%s [%s] %s: step is only used by withdrawn scenarios; remove this annotation", a.Keyword, ref, a.Text)
-	case otherKeyword != "":
-		l.report(a.File, a.Line, "@%s [%s] %s: the spec's step takes %s", a.Keyword, ref, a.Text, otherKeyword)
-	default:
-		l.report(a.File, a.Line, "@%s [%s] %s: no such step in %s", a.Keyword, ref, a.Text, where)
+	case in == nil:
+		l.report(a.File, a.Line, "@intent [#%s]: no intent file has an intent with @id:%s", a.ID, a.ID)
+	case in.Status == StatusWithdrawn:
+		l.report(a.File, a.Line, "@intent [#%s]: intent is withdrawn; remove it from this line", a.ID)
 	}
 }
 
-// checkCoverage reports implemented scenarios with no @scenario annotation in code or in tests,
-// and steps of them with no annotation in tests. Step annotations in code are allowed but not
-// required.
+// checkReplaces reports a "Replaces:" line that names an intent that doesn't exist, or one that's
+// still active: an intent is replaced by deprecating it.
+func (l *linter) checkReplaces() {
+	for _, p := range l.sortedFiles() {
+		for _, in := range l.files[p].Intents {
+			for _, id := range in.Replaces {
+				old := l.lookup(id)
+				switch {
+				case old == nil:
+					l.report(p, in.ReplacesLine, "Replaces: no intent file has an intent with @id:%s", id)
+				case old == in:
+					l.report(p, in.ReplacesLine, "Replaces: an intent can't replace itself")
+				case old.Active():
+					l.report(p, in.ReplacesLine, "Replaces: @id:%s is still %s; deprecate it when it's replaced", id, old.Status)
+				}
+			}
+		}
+	}
+}
+
+// checkCoverage reports implemented intents with no @intent annotation in code or in tests.
 func (l *linter) checkCoverage() {
-	type key struct{ feature, keyword, id, text string }
-	index := map[key]*found{}
+	index := map[string]*found{}
 	for _, a := range l.annotations {
-		k := key{a.Feature, a.Keyword, a.ID, a.Text}
-		if index[k] == nil {
-			index[k] = &found{}
+		if index[a.ID] == nil {
+			index[a.ID] = &found{}
 		}
 		if a.Test {
-			index[k].test = true
+			index[a.ID].test = true
 		} else {
-			index[k].code = true
+			index[a.ID].code = true
 		}
 	}
-	has := func(k key) found {
-		if v := index[k]; v != nil {
-			return *v
+	for _, p := range l.sortedFiles() {
+		for _, in := range l.files[p].Intents {
+			if in.Status != StatusImplemented || in.ID == "" || l.intentFile[in.ID] != p {
+				continue
+			}
+			got := found{}
+			if v := index[in.ID]; v != nil {
+				got = *v
+			}
+			msg := fmt.Sprintf("implemented intent %s has no @intent [#%s] annotation", in.ID, in.ID)
+			switch {
+			case !got.code && !got.test:
+				l.report(p, in.Line, "%s in code or tests", msg)
+			case !got.code:
+				l.report(p, in.Line, "%s in code", msg)
+			case !got.test:
+				l.report(p, in.Line, "%s in tests", msg)
+			}
 		}
-		return found{}
+	}
+}
+
+// checkLimits reports intent files, statements, and entry points that say more than the limits
+// allow. They're the sign that intents are turning into a list of every behavior.
+func (l *linter) checkLimits() {
+	lim := l.cfg.Limits
+	for _, p := range l.sortedFiles() {
+		f := l.files[p]
+		active := 0
+		for _, in := range f.Intents {
+			if in.Active() {
+				active++
+			}
+			if words := len(strings.Fields(in.Statement)); lim.StatementWords > 0 && words > lim.StatementWords && in.Active() {
+				l.overLimit(p, in.Line, "intent %s's statement is %d words (limit %d); state the obligation in one sentence and move the detail to its notes", label(in), words, lim.StatementWords)
+			}
+		}
+		if lim.IntentsPerFile > 0 && active > lim.IntentsPerFile {
+			l.overLimit(p, 1, "%d active intents (limit %d); keep the ones the feature would be wrong without, and leave the rest to tests, or split the file", active, lim.IntentsPerFile)
+		}
 	}
 
-	paths := make([]string, 0, len(l.features))
-	for p := range l.features {
+	if lim.IntentsPerEntryPoint > 0 {
+		seen := map[string]bool{}
+		for _, a := range l.annotations {
+			key := fmt.Sprintf("%s:%d", a.File, a.Line)
+			if a.Test || seen[key] || a.Count <= lim.IntentsPerEntryPoint {
+				continue
+			}
+			seen[key] = true
+			l.overLimit(a.File, a.Line, "@intent names %d intents (limit %d); an entry point with this many is either doing too much or its intents are too detailed", a.Count, lim.IntentsPerEntryPoint)
+		}
+	}
+}
+
+func (l *linter) sortedFiles() []string {
+	paths := make([]string, 0, len(l.files))
+	for p := range l.files {
 		paths = append(paths, p)
 	}
 	sort.Strings(paths)
-
-	for _, p := range paths {
-		for _, s := range l.features[p].Scenarios {
-			if s.Status != StatusImplemented || s.ID == "" {
-				continue
-			}
-			got := has(key{p, "scenario", s.ID, ""})
-			l.reportMissing(p, s.Line, got, fmt.Sprintf("implemented scenario %s has no @scenario [#%s] annotation", s.ID, s.ID))
-
-			for _, st := range s.Steps {
-				kw := strings.ToLower(st.Keyword)
-				got := found{code: true}
-				for _, k := range []string{kw, st.Kind} {
-					for _, id := range []string{"", s.ID} {
-						got.test = got.test || has(key{p, k, id, st.Text}).test
-					}
-				}
-				want := "@" + kw
-				if st.Kind != kw {
-					want += " or @" + st.Kind
-				}
-				l.reportMissing(p, st.Line, got, fmt.Sprintf("step %q of implemented scenario %s has no %s [%s] annotation", st.Keyword+" "+st.Text, s.ID, want, p))
-			}
-		}
-	}
-}
-
-func (l *linter) reportMissing(file string, line int, got found, msg string) {
-	switch {
-	case !got.code && !got.test:
-		l.report(file, line, "%s in code or tests", msg)
-	case !got.code:
-		l.report(file, line, "%s in code", msg)
-	case !got.test:
-		l.report(file, line, "%s in tests", msg)
-	}
+	return paths
 }
 
 // found records whether something is annotated in code, in tests, or both.

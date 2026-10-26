@@ -108,6 +108,8 @@ func TestConfigFileErrors(t *testing.T) {
 		{`{"testPatterns": ["("]}`, "testPatterns"},
 		{`{"layers": [{"name": "storage"}]}`, "needs a name and a match"},
 		{`{"layers": [{"name": "storage", "match": "("}]}`, "layers: storage"},
+		{`{"limits": {"intentsPerFile": -1}}`, "can't be negative"},
+		{`{"limits": {"intentsPerScenario": 3}}`, "unknown field"},
 	} {
 		root := writeRepo(t, map[string]string{ConfigFile: tt.src})
 		_, err := LoadConfig(root)
@@ -117,23 +119,35 @@ func TestConfigFileErrors(t *testing.T) {
 	}
 }
 
+func TestConfigFileSetsLimits(t *testing.T) {
+	root := writeRepo(t, map[string]string{ConfigFile: `{"limits": {"intentsPerFile": 5, "statementWords": 0}, "strictLimits": true}`})
+	c, err := LoadConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Limits that aren't set keep their defaults; 0 turns one off.
+	want := Limits{IntentsPerFile: 5, IntentsPerEntryPoint: DefaultLimits.IntentsPerEntryPoint, StatementWords: 0}
+	if c.Limits != want || !c.StrictLimits {
+		t.Errorf("got %+v strict=%v, want %+v strict=true", c.Limits, c.StrictLimits, want)
+	}
+}
+
 // The configured features directory, languages, and test patterns are what Lint and the traces
 // use.
 func TestLintAndTraceUseTheConfig(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		ConfigFile: `{"featuresDir": "specs", "languages": {".nix": "hash"}, "testPatterns": ["^checks/"]}`,
-		"specs/build.feature": `Feature: Build
-  @status:implemented @id:reproducible
-  Scenario: Builds are reproducible
-    When I build twice
-    Then the outputs match
+		"specs/build.md": `# Build
+
+Builds the project.
+
+## Must
+
+- @id:reproducible @status:implemented
+  Building the same source twice gives the same output.
 `,
-		"flake.nix": "# @scenario [#reproducible]\n{ }\n",
-		"checks/build.nix": strings.Join([]string{
-			"# @scenario [#reproducible]",
-			"# @when [specs/build.feature] I build twice",
-			"# @then [specs/build.feature] the outputs match",
-		}, "\n"),
+		"flake.nix":        "# @intent [#reproducible]\n{ }\n",
+		"checks/build.nix": "# @intent [#reproducible]\n",
 	})
 
 	problems, err := Lint(root)
@@ -144,18 +158,18 @@ func TestLintAndTraceUseTheConfig(t *testing.T) {
 		t.Errorf("expected no problems, got %v", problems)
 	}
 
-	tr, err := TraceScenario(root, "reproducible")
+	tr, err := TraceIntent(root, "reproducible")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tr.Feature != "specs/build.feature" {
-		t.Errorf("traced %s", tr.Feature)
+	if tr.File.Path != "specs/build.md" {
+		t.Errorf("traced %s", tr.File.Path)
 	}
 	var where []string
-	for _, a := range tr.Entry {
+	for _, a := range tr.Links {
 		where = append(where, a.File+" "+a.Where())
 	}
 	if want := []string{"checks/build.nix checks test", "flake.nix root"}; !reflect.DeepEqual(where, want) {
-		t.Errorf("entry points: got %v, want %v", where, want)
+		t.Errorf("links: got %v, want %v", where, want)
 	}
 }

@@ -3,10 +3,10 @@
 ## Related
 
 - universal
-- [features/call-reminders.feature#cancelled-no-reminder] Wrong title
-- [features/call-reminders.feature#sms-reminder] SMS reminder is sent
-- [features/call-reminders.feature#nope] Nope
-- [features/call-reminders.feature] Wrong feature title
+- [features/call-reminders.md#cancelled-no-reminder] Any label is fine
+- [features/call-reminders.md#sms-reminder] SMS
+- [features/call-reminders.md#nope] Nope
+- [features/missing.md] Missing file
 - [docs/adr/0009-missing.md] Missing
 - [README.md] Readme
 - something else

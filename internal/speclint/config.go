@@ -25,11 +25,29 @@ type Config struct {
 	FeaturesDir string // repo-relative, forward slashes
 	ADRDir      string // repo-relative, forward slashes
 
+	// Limits keep intents high-level. Going over one is a warning, or an error with StrictLimits.
+	Limits       Limits
+	StrictLimits bool
+
 	languages    map[string]commentStyle // by file extension
 	skipDirs     map[string]bool
 	testPatterns []*regexp.Regexp // tests beyond the default conventions in isDefaultTestFile
 	layers       []layer
 }
+
+// Limits caps how much an intent file or entry point says. 0 turns a limit off.
+type Limits struct {
+	// IntentsPerFile caps the active (not-implemented or implemented) intents in one file.
+	IntentsPerFile int
+	// IntentsPerEntryPoint caps the intents one @intent line in code names. Tests aren't counted,
+	// since one test may check several intents.
+	IntentsPerEntryPoint int
+	// StatementWords caps the words in an intent's statement. Notes aren't counted.
+	StatementWords int
+}
+
+// DefaultLimits are the limits used when .speclint.json doesn't set them.
+var DefaultLimits = Limits{IntentsPerFile: 8, IntentsPerEntryPoint: 4, StatementWords: 40}
 
 type layer struct {
 	name  string
@@ -41,6 +59,14 @@ type fileConfig struct {
 	// FeaturesDir and ADRDir replace the defaults, "features" and "docs/adr".
 	FeaturesDir string `json:"featuresDir"`
 	ADRDir      string `json:"adrDir"`
+	// Limits replaces any of the default limits; 0 turns one off. StrictLimits makes going over a
+	// limit an error rather than a warning.
+	Limits *struct {
+		IntentsPerFile       *int `json:"intentsPerFile"`
+		IntentsPerEntryPoint *int `json:"intentsPerEntryPoint"`
+		StatementWords       *int `json:"statementWords"`
+	} `json:"limits"`
+	StrictLimits bool `json:"strictLimits"`
 	// Languages maps file extensions to a comment style: "c", "hash", "dash", "c-hash", or "html".
 	// It adds to the defaults, or overrides one. A style of "" stops an extension being read.
 	Languages map[string]string `json:"languages"`
@@ -139,6 +165,7 @@ func DefaultConfig() *Config {
 	c := &Config{
 		FeaturesDir: "features",
 		ADRDir:      "docs/adr",
+		Limits:      DefaultLimits,
 		languages:   map[string]commentStyle{},
 		skipDirs:    map[string]bool{},
 		layers:      defaultLayers,
@@ -196,6 +223,27 @@ func (c *Config) apply(src []byte) error {
 			return err
 		}
 	}
+
+	if f.Limits != nil {
+		for _, l := range []struct {
+			name string
+			from *int
+			to   *int
+		}{
+			{"intentsPerFile", f.Limits.IntentsPerFile, &c.Limits.IntentsPerFile},
+			{"intentsPerEntryPoint", f.Limits.IntentsPerEntryPoint, &c.Limits.IntentsPerEntryPoint},
+			{"statementWords", f.Limits.StatementWords, &c.Limits.StatementWords},
+		} {
+			if l.from == nil {
+				continue
+			}
+			if *l.from < 0 {
+				return fmt.Errorf("limits: %s can't be negative; use 0 to turn it off", l.name)
+			}
+			*l.to = *l.from
+		}
+	}
+	c.StrictLimits = f.StrictLimits
 
 	exts := make([]string, 0, len(f.Languages))
 	for ext := range f.Languages {

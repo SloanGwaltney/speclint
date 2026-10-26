@@ -1,29 +1,36 @@
-app.go:3: @scenario names scenarios by ID only, like @scenario [#some-id] [#other-id]
-app.go:4: @scenario names [#nope] twice
-app.go:4: @scenario [#nope]: no feature file has a scenario with @id:nope
-app.go:4: @scenario [#sms-reminder]: scenario is withdrawn; remove it from this line
-app.go:5: @scenario is already on line 4 of this comment; name every scenario on that one line
-app.go:6: @given [features/call-reminders.feature] I had a call scheduled for 3 PM: no such step in features/call-reminders.feature
-app.go:7: @then [features/call-reminders.feature] I cancelled the call: the spec's step takes @and or @given
-app.go:8: @then [features/call-reminders.feature] I receive an SMS reminder: step is only used by withdrawn scenarios; remove this annotation
-app.go:9: @then [features/call-reminders.feature#sms-reminder]: scenario is withdrawn; remove this annotation
-docs/adr/0001-bad-refs.md:3: Related mixes universal with feature references; use one or the other
-docs/adr/0001-bad-refs.md:6: [features/call-reminders.feature#cancelled-no-reminder]: title "Wrong title" doesn't match the spec's "No reminder for a cancelled call"
-docs/adr/0001-bad-refs.md:7: [features/call-reminders.feature#sms-reminder]: scenario is withdrawn; don't list it in Related
-docs/adr/0001-bad-refs.md:8: [features/call-reminders.feature#nope]: features/call-reminders.feature has no scenario with @id:nope
-docs/adr/0001-bad-refs.md:9: [features/call-reminders.feature]: title "Wrong feature title" doesn't match the Feature title "Call reminders"
+app.go:3: @intent names intents by ID only, like @intent [#some-id] [#other-id]
+app.go:4: @intent names [#nope] twice
+app.go:4: @intent [#nope]: no intent file has an intent with @id:nope
+app.go:4: @intent [#sms-reminder]: intent is withdrawn; remove it from this line
+app.go:5: @intent is already on line 4 of this comment; name every intent on that one line
+app.go:6: @scenario is speclint v1; link intents with @intent [#id]
+app.go:7: @then is a speclint v1 step annotation; v2 links intents, not steps, so remove it
+app.go:10: warning: @intent names 3 intents (limit 2); an entry point with this many is either doing too much or its intents are too detailed
+docs/adr/0001-bad-refs.md:3: Related mixes universal with intent references; use one or the other
+docs/adr/0001-bad-refs.md:7: [features/call-reminders.md#sms-reminder]: intent is withdrawn; don't list it in Related
+docs/adr/0001-bad-refs.md:8: [features/call-reminders.md#nope]: features/call-reminders.md has no intent with @id:nope
+docs/adr/0001-bad-refs.md:9: [features/missing.md]: features/missing.md doesn't exist
 docs/adr/0001-bad-refs.md:10: [docs/adr/0009-missing.md] doesn't exist
 docs/adr/0001-bad-refs.md:11: [README.md]: Related entries link to features/ or docs/adr/
-docs/adr/0001-bad-refs.md:12: Related entry should be "- universal" or "- [<path>] <title>"
+docs/adr/0001-bad-refs.md:12: Related entry should be "- universal" or "- [<path>] <label>"
 docs/adr/0002-no-related.md:1: ADR has no ## Related section
-docs/adr/0003-empty-related.md:3: Related lists no features and isn't universal
-features/call-reminders.feature:1: @status:implemented goes on a Scenario, not on Feature
-features/call-reminders.feature:7: step "And I cancelled the call" of implemented scenario cancelled-no-reminder has no @and or @given [features/call-reminders.feature] annotation in tests
-features/call-reminders.feature:8: step "Then I do not receive a reminder" of implemented scenario cancelled-no-reminder has no @then [features/call-reminders.feature] annotation in tests
-features/call-reminders.feature:11: scenario "Missing an ID" has no @id: tag
-features/call-reminders.feature:14: scenario "Missing a status" has no @status: tag
-features/call-reminders.feature:17: scenario "Bad status and ID" has unknown status "done"
-features/call-reminders.feature:17: scenario ID "Bad_ID" isn't kebab-case (lowercase letters, digits, hyphens)
-features/call-reminders.feature:20: scenario ID "no-status" is already used on line 14
-features/other.feature:4: scenario ID "sms-reminder" is already used in features/call-reminders.feature:23; IDs are unique across feature files
-queries.sql:2: @then [features/call-reminders.feature] I receive a reminder soon: no such step in features/call-reminders.feature
+docs/adr/0003-empty-related.md:3: Related lists no intents and isn't universal
+features/call-reminders.md:1: intent file "Call reminders" has no purpose; say in a paragraph under the title what the feature is for
+features/call-reminders.md:1: warning: 6 active intents (limit 3); keep the ones the feature would be wrong without, and leave the rest to tests, or split the file
+features/call-reminders.md:5: implemented intent cancelled-no-reminder has no @intent [#cancelled-no-reminder] annotation in tests
+features/call-reminders.md:8: intent has no @id: tag
+features/call-reminders.md:11: intent no-status has no @status: tag
+features/call-reminders.md:14: unknown tag @kind:must; an intent has only @id: and @status:
+features/call-reminders.md:14: intent ID "Bad_ID" isn't kebab-case (lowercase letters, digits, hyphens)
+features/call-reminders.md:14: intent on this line has unknown status "done"
+features/call-reminders.md:17: intent ID "no-status" is already used on line 11
+features/call-reminders.md:23: intent no-statement has no statement; write the obligation on the line after its tags
+features/call-reminders.md:25: every item under "## Must" is an intent; start it with @id: and @status:
+features/call-reminders.md:27: warning: intent too-wordy's statement is 14 words (limit 10); state the obligation in one sentence and move the detail to its notes
+features/call-reminders.md:32: Replaces: @id:cancelled-no-reminder is still implemented; deprecate it when it's replaced
+features/call-reminders.md:32: Replaces: no intent file has an intent with @id:nope
+features/call-reminders.md:36: intents go under "## Must" or "## Must not"
+features/call-reminders.md:39: an intent file has one "# Title"; use "## Must", "## Must not", or another "##" section
+features/old.feature:1: speclint v2 reads intents from features/*.md, not .feature files; convert this file (see "Moving from v1" in the speclint README)
+features/other.md:7: intent ID "sms-reminder" is already used in features/call-reminders.md:20; IDs are unique across intent files
+queries.sql:2: @then is a speclint v1 step annotation; v2 links intents, not steps, so remove it
